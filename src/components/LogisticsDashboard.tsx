@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import MapComponent, { MapRef } from './MapComponent';
+import MapComponent from './MapComponent';
 import { Truck, AlertTriangle, Snowflake, CloudRain } from 'lucide-react';
 
 const BC_LOCATIONS = [

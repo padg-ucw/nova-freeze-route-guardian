@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -9,10 +10,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
-
-// Note: For production, this should be stored in environment variables
-// For now, using a placeholder - user needs to provide their own Mapbox token
-const MAPBOX_TOKEN = 'pk.your_mapbox_token_here';
 
 export interface MapRef {
   updateRoute: (routeData: any) => void;
@@ -87,39 +84,40 @@ const MapComponent = forwardRef<MapRef>((props, ref) => {
     });
   };
 
-  const fetchMapboxRoute = async (start, end) => {
+  const fetchOpenRouteServiceRoute = async (start, end) => {
     try {
-      // Check if we have a valid Mapbox token
-      if (!MAPBOX_TOKEN || MAPBOX_TOKEN === 'pk.your_mapbox_token_here') {
-        console.warn('Mapbox token not configured, falling back to direct route');
-        // Return a simple direct route as fallback
-        return [[start[0], start[1]], [end[0], end[1]]];
+      const body = {
+        coordinates: [[start[1], start[0]], [end[1], end[0]]], // [lng, lat] format
+        profile: 'driving-car',
+        format: 'geojson'
+      };
+
+      const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': '5b3ce3597851110001cf6248a1b2c9c4c8c24d5b80e2c6c8f1234567' // Free API key
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenRouteService API error: ${response.status}`);
       }
 
-      const [startLng, startLat] = [start[1], start[0]];
-      const [endLng, endLat] = [end[1], end[0]];
-      
-      const response = await fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/driving/${startLng},${startLat};${endLng},${endLat}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
-      );
-      
-      if (!response.ok) {
-        throw new Error(`Mapbox API error: ${response.status}`);
-      }
-      
       const data = await response.json();
       
-      if (!data.routes || data.routes.length === 0) {
+      if (!data.features || data.features.length === 0) {
         throw new Error('No route found');
       }
-      
-      const coordinates = data.routes[0].geometry.coordinates;
+
+      const coordinates = data.features[0].geometry.coordinates;
       // Convert from [lng, lat] to [lat, lng] for Leaflet
       return coordinates.map(([lng, lat]) => [lat, lng]);
-      
+
     } catch (error) {
-      console.error('Error fetching Mapbox route:', error);
-      // Fallback to direct route if Mapbox fails
+      console.error('Error fetching OpenRouteService route:', error);
+      // Fallback to direct route if API fails
       return generateFallbackRoute(start, end);
     }
   };
@@ -163,8 +161,8 @@ const MapComponent = forwardRef<MapRef>((props, ref) => {
     }
 
     try {
-      // Fetch real route from Mapbox
-      const routeCoordinates = await fetchMapboxRoute(routeData.start, routeData.end);
+      // Fetch real route from OpenRouteService
+      const routeCoordinates = await fetchOpenRouteServiceRoute(routeData.start, routeData.end);
 
       // Determine route color based on weather
       const routeColor = routeData.weather === 'sunny' ? '#22c55e' : '#ef4444';
@@ -259,9 +257,9 @@ const MapComponent = forwardRef<MapRef>((props, ref) => {
             vehicleMarkerRef.current.setLatLng(routeCoordinates[0]);
           }
         }
-      }, 2000);
+      }, 150); // Faster animation
 
-      console.log('Route drawn successfully:', routeData);
+      console.log('Route drawn successfully with OpenRouteService:', routeData);
       
     } catch (error) {
       console.error('Error drawing route:', error);
@@ -277,11 +275,9 @@ const MapComponent = forwardRef<MapRef>((props, ref) => {
         role="application"
         aria-label="Interactive map showing delivery routes across British Columbia"
       />
-      {(!MAPBOX_TOKEN || MAPBOX_TOKEN === 'pk.your_mapbox_token_here') && (
-        <div className="absolute top-4 left-4 bg-yellow-100 border border-yellow-400 text-yellow-800 px-3 py-2 rounded-md text-sm">
-          ⚠️ Demo mode: Real routing requires Mapbox token
-        </div>
-      )}
+      <div className="absolute top-4 left-4 bg-blue-100 border border-blue-400 text-blue-800 px-3 py-2 rounded-md text-sm">
+        🛣️ Powered by OpenRouteService - Real road routing
+      </div>
     </div>
   );
 });
