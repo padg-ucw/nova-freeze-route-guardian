@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -15,7 +14,11 @@ L.Icon.Default.mergeOptions({
 // For now, using a placeholder - user needs to provide their own Mapbox token
 const MAPBOX_TOKEN = 'pk.your_mapbox_token_here';
 
-const MapComponent = forwardRef((props, ref) => {
+export interface MapRef {
+  updateRoute: (routeData: any) => void;
+}
+
+const MapComponent = forwardRef<MapRef>((props, ref) => {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const routeLayerRef = useRef(null);
