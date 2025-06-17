@@ -26,6 +26,10 @@ const WEATHER_CONDITIONS = [
   { value: 'snow', label: '❄️ Snow', icon: '❄️' }
 ];
 
+interface MapRef {
+  updateRoute: (routeData: any) => void;
+}
+
 const LogisticsDashboard = () => {
   const [startLocation, setStartLocation] = useState('');
   const [endLocation, setEndLocation] = useState('');
@@ -33,7 +37,7 @@ const LogisticsDashboard = () => {
   const [route, setRoute] = useState(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const mapRef = useRef();
+  const mapRef = useRef<MapRef>(null);
 
   const handleGenerateRoute = async () => {
     setError('');
