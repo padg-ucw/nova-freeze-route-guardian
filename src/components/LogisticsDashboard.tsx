@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import MapComponent from './MapComponent';
+import RouteAnalysisTable from './RouteAnalysisTable';
 import { Truck, AlertTriangle, Snowflake, CloudRain } from 'lucide-react';
 
 const BC_LOCATIONS = [
@@ -35,9 +36,10 @@ const LogisticsDashboard = () => {
   const [endLocation, setEndLocation] = useState('');
   const [weather, setWeather] = useState('sunny');
   const [route, setRoute] = useState(null);
+  const [routeDetails, setRouteDetails] = useState(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const mapRef = useRef<MapRef>(null);
+  const mapRef = useRef(null);
 
   const handleGenerateRoute = async () => {
     setError('');
@@ -84,6 +86,11 @@ const LogisticsDashboard = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Listen for route details from the map component
+  const handleRouteDetailsUpdate = (details) => {
+    setRouteDetails(details);
   };
 
   const isHighRisk = weather === 'rain' || weather === 'snow';
@@ -211,8 +218,22 @@ const LogisticsDashboard = () => {
 
       {/* Map */}
       <Card className="overflow-hidden shadow-xl border-blue-200">
-        <MapComponent ref={mapRef} />
+        <MapComponent 
+          ref={mapRef} 
+          onRouteDetailsUpdate={handleRouteDetailsUpdate}
+        />
       </Card>
+
+      {/* Route Analysis Table */}
+      {route && (
+        <RouteAnalysisTable 
+          route={{
+            ...route,
+            distance: routeDetails?.distance,
+            duration: routeDetails?.duration
+          }}
+        />
+      )}
 
       {/* Route Info */}
       {route && (

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -17,7 +16,11 @@ export interface MapRef {
   updateRoute: (routeData: any) => void;
 }
 
-const MapComponent = forwardRef<MapRef>((props, ref) => {
+interface MapComponentProps {
+  onRouteDetailsUpdate?: (details: { distance: number; duration: number }) => void;
+}
+
+const MapComponent = forwardRef<MapRef, MapComponentProps>(({ onRouteDetailsUpdate }, ref) => {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const routingControlRef = useRef(null);
@@ -187,6 +190,14 @@ const MapComponent = forwardRef<MapRef>((props, ref) => {
         if (route && route.coordinates) {
           // Store route coordinates for animation
           currentRouteCoordinatesRef.current = route.coordinates;
+          
+          // Pass route details to parent component
+          if (onRouteDetailsUpdate && route.summary) {
+            onRouteDetailsUpdate({
+              distance: route.summary.totalDistance,
+              duration: route.summary.totalTime
+            });
+          }
           
           // Create and animate vehicle marker
           vehicleMarkerRef.current = L.marker(route.coordinates[0], {
