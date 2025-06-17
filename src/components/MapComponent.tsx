@@ -2,6 +2,8 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
+import 'leaflet-routing-machine';
 
 // Fix for default markers in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -18,10 +20,10 @@ export interface MapRef {
 const MapComponent = forwardRef<MapRef>((props, ref) => {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const routeLayerRef = useRef(null);
-  const markersRef = useRef([]);
+  const routingControlRef = useRef(null);
   const vehicleMarkerRef = useRef(null);
   const animationRef = useRef(null);
+  const currentRouteCoordinatesRef = useRef([]);
 
   useImperativeHandle(ref, () => ({
     updateRoute: (routeData) => {
@@ -84,186 +86,136 @@ const MapComponent = forwardRef<MapRef>((props, ref) => {
     });
   };
 
-  const fetchOpenRouteServiceRoute = async (start, end) => {
-    try {
-      const body = {
-        coordinates: [[start[1], start[0]], [end[1], end[0]]], // [lng, lat] format
-        profile: 'driving-car',
-        format: 'geojson'
-      };
-
-      const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': '5b3ce3597851110001cf6248a1b2c9c4c8c24d5b80e2c6c8f1234567' // Free API key
-        },
-        body: JSON.stringify(body)
-      });
-
-      if (!response.ok) {
-        throw new Error(`OpenRouteService API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (!data.features || data.features.length === 0) {
-        throw new Error('No route found');
-      }
-
-      const coordinates = data.features[0].geometry.coordinates;
-      // Convert from [lng, lat] to [lat, lng] for Leaflet
-      return coordinates.map(([lng, lat]) => [lat, lng]);
-
-    } catch (error) {
-      console.error('Error fetching OpenRouteService route:', error);
-      // Fallback to direct route if API fails
-      return generateFallbackRoute(start, end);
-    }
-  };
-
-  const generateFallbackRoute = (start, end) => {
-    // Generate a more realistic route with multiple waypoints as fallback
-    const latDiff = end[0] - start[0];
-    const lngDiff = end[1] - start[1];
-    const segments = 20;
-    const coordinates = [];
-    
-    for (let i = 0; i <= segments; i++) {
-      const progress = i / segments;
-      // Add some curve to make it look more realistic
-      const curveFactor = Math.sin(progress * Math.PI) * 0.01;
-      const lat = start[0] + (latDiff * progress) + (curveFactor * (Math.random() - 0.5));
-      const lng = start[1] + (lngDiff * progress) + (curveFactor * (Math.random() - 0.5));
-      coordinates.push([lat, lng]);
-    }
-    
-    return coordinates;
-  };
-
   const drawRoute = async (routeData) => {
     if (!mapRef.current) return;
 
-    // Clear existing route and markers
-    if (routeLayerRef.current) {
-      mapRef.current.removeLayer(routeLayerRef.current);
+    // Clear existing routing control and vehicle marker
+    if (routingControlRef.current) {
+      mapRef.current.removeControl(routingControlRef.current);
     }
     if (vehicleMarkerRef.current) {
       mapRef.current.removeLayer(vehicleMarkerRef.current);
     }
-    markersRef.current.forEach(marker => {
-      mapRef.current.removeLayer(marker);
-    });
-    markersRef.current = [];
-
     if (animationRef.current) {
       clearInterval(animationRef.current);
     }
 
     try {
-      // Fetch real route from OpenRouteService
-      const routeCoordinates = await fetchOpenRouteServiceRoute(routeData.start, routeData.end);
-
       // Determine route color based on weather
       const routeColor = routeData.weather === 'sunny' ? '#22c55e' : '#ef4444';
-      const routeWeight = 6;
 
-      // Draw route polyline
-      routeLayerRef.current = L.polyline(routeCoordinates, {
-        color: routeColor,
-        weight: routeWeight,
-        opacity: 0.8,
-        smoothFactor: 1
-      }).addTo(mapRef.current);
-
-      // Add start marker
-      const startMarker = L.marker(routeData.start, {
-        icon: L.divIcon({
-          html: `<div style="
-            background: #22c55e; 
-            color: white; 
-            border-radius: 50%; 
-            width: 24px; 
-            height: 24px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            font-weight: bold;
-            border: 2px solid white;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-          ">S</div>`,
-          className: 'custom-start-icon',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
-        })
-      }).addTo(mapRef.current);
-      
-      startMarker.bindTooltip(`Start: ${routeData.startName}`, {
-        permanent: false,
-        direction: 'top'
-      });
-
-      // Add end marker
-      const endMarker = L.marker(routeData.end, {
-        icon: L.divIcon({
-          html: `<div style="
-            background: #ef4444; 
-            color: white; 
-            border-radius: 50%; 
-            width: 24px; 
-            height: 24px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            font-weight: bold;
-            border: 2px solid white;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-          ">E</div>`,
-          className: 'custom-end-icon',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
-        })
-      }).addTo(mapRef.current);
-      
-      endMarker.bindTooltip(`End: ${routeData.endName}`, {
-        permanent: false,
-        direction: 'top'
-      });
-
-      markersRef.current = [startMarker, endMarker];
-
-      // Create and animate vehicle marker
-      vehicleMarkerRef.current = L.marker(routeCoordinates[0], {
-        icon: createTruckIcon()
-      }).addTo(mapRef.current);
-
-      // Fit map to route bounds
-      mapRef.current.fitBounds(routeLayerRef.current.getBounds(), {
-        padding: [50, 50]
-      });
-
-      // Animate vehicle along route
-      let currentSegment = 0;
-      animationRef.current = setInterval(() => {
-        if (currentSegment < routeCoordinates.length - 1) {
-          currentSegment++;
-          if (vehicleMarkerRef.current) {
-            vehicleMarkerRef.current.setLatLng(routeCoordinates[currentSegment]);
+      // Create routing control with OSRM
+      routingControlRef.current = L.Routing.control({
+        waypoints: [
+          L.latLng(routeData.start[0], routeData.start[1]),
+          L.latLng(routeData.end[0], routeData.end[1])
+        ],
+        router: L.Routing.osrmv1({
+          serviceUrl: 'https://router.project-osrm.org/route/v1',
+          profile: 'driving'
+        }),
+        lineOptions: {
+          styles: [{ color: routeColor, weight: 6, opacity: 0.8 }]
+        },
+        createMarker: function(i, waypoint, n) {
+          const isStart = i === 0;
+          const isEnd = i === n - 1;
+          
+          if (isStart) {
+            return L.marker(waypoint.latLng, {
+              icon: L.divIcon({
+                html: `<div style="
+                  background: #22c55e; 
+                  color: white; 
+                  border-radius: 50%; 
+                  width: 24px; 
+                  height: 24px; 
+                  display: flex; 
+                  align-items: center; 
+                  justify-content: center; 
+                  font-weight: bold;
+                  border: 2px solid white;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                ">S</div>`,
+                className: 'custom-start-icon',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+              })
+            }).bindTooltip(`Start: ${routeData.startName}`, {
+              permanent: false,
+              direction: 'top'
+            });
+          } else if (isEnd) {
+            return L.marker(waypoint.latLng, {
+              icon: L.divIcon({
+                html: `<div style="
+                  background: #ef4444; 
+                  color: white; 
+                  border-radius: 50%; 
+                  width: 24px; 
+                  height: 24px; 
+                  display: flex; 
+                  align-items: center; 
+                  justify-content: center; 
+                  font-weight: bold;
+                  border: 2px solid white;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                ">E</div>`,
+                className: 'custom-end-icon',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+              })
+            }).bindTooltip(`End: ${routeData.endName}`, {
+              permanent: false,
+              direction: 'top'
+            });
           }
-        } else {
-          // Restart animation
-          currentSegment = 0;
-          if (vehicleMarkerRef.current) {
-            vehicleMarkerRef.current.setLatLng(routeCoordinates[0]);
-          }
+          return null;
+        },
+        routeWhileDragging: false,
+        addWaypoints: false,
+        draggableWaypoints: false,
+        fitSelectedRoutes: true,
+        show: false // Hide the instruction panel
+      }).addTo(mapRef.current);
+
+      // Listen for route found event to start animation
+      routingControlRef.current.on('routesfound', function(e) {
+        const routes = e.routes;
+        const route = routes[0];
+        
+        if (route && route.coordinates) {
+          // Store route coordinates for animation
+          currentRouteCoordinatesRef.current = route.coordinates;
+          
+          // Create and animate vehicle marker
+          vehicleMarkerRef.current = L.marker(route.coordinates[0], {
+            icon: createTruckIcon()
+          }).addTo(mapRef.current);
+
+          // Animate vehicle along route
+          let currentSegment = 0;
+          animationRef.current = setInterval(() => {
+            if (currentSegment < route.coordinates.length - 1) {
+              currentSegment++;
+              if (vehicleMarkerRef.current) {
+                vehicleMarkerRef.current.setLatLng(route.coordinates[currentSegment]);
+              }
+            } else {
+              // Restart animation
+              currentSegment = 0;
+              if (vehicleMarkerRef.current) {
+                vehicleMarkerRef.current.setLatLng(route.coordinates[0]);
+              }
+            }
+          }, 150);
         }
-      }, 150); // Faster animation
+      });
 
-      console.log('Route drawn successfully with OpenRouteService:', routeData);
+      console.log('OSRM route initialized successfully:', routeData);
       
     } catch (error) {
-      console.error('Error drawing route:', error);
-      // Show error to user (this would typically be handled by the parent component)
+      console.error('Error drawing OSRM route:', error);
     }
   };
 
@@ -275,8 +227,8 @@ const MapComponent = forwardRef<MapRef>((props, ref) => {
         role="application"
         aria-label="Interactive map showing delivery routes across British Columbia"
       />
-      <div className="absolute top-4 left-4 bg-blue-100 border border-blue-400 text-blue-800 px-3 py-2 rounded-md text-sm">
-        🛣️ Powered by OpenRouteService - Real road routing
+      <div className="absolute top-4 left-4 bg-green-100 border border-green-400 text-green-800 px-3 py-2 rounded-md text-sm">
+        🛣️ Powered by OSRM - Real road routing with OpenStreetMap
       </div>
     </div>
   );
